@@ -1,9 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { requireAuth } from '../lib/auth'
-import { getTrackById, getStreamUrl } from '../lib/audius'
-import { prisma } from '../lib/db'
 
-async function handler(req: VercelRequest, res: VercelResponse, user: any) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' })
     }
@@ -16,63 +13,36 @@ async function handler(req: VercelRequest, res: VercelResponse, user: any) {
             return res.status(400).json({ error: 'Track ID is required' })
         }
 
-        // Check cache first
-        let cachedTrack = await prisma.trackCache.findUnique({
-            where: { id: trackId },
-        })
-
-        // If not in cache or cache is old (> 7 days), fetch from Audius
-        if (!cachedTrack || Date.now() - cachedTrack.fetchedAt.getTime() > 7 * 24 * 60 * 60 * 1000) {
-            const track = await getTrackById(trackId)
-
-            if (!track) {
-                return res.status(404).json({ error: 'Track not found' })
-            }
-
-            const streamUrl = await getStreamUrl(trackId)
-
-            // Update cache
-            cachedTrack = await prisma.trackCache.upsert({
-                where: { id: trackId },
-                create: {
-                    id: trackId,
-                    title: track.title,
-                    artistName: track.artistName,
-                    durationSec: track.durationSec,
-                    genre: track.genre,
-                    tags: track.tags || [],
-                    audiusStreamUrl: streamUrl || undefined,
-                    thumbnailUrl: track.thumbnailUrl,
-                },
-                update: {
-                    title: track.title,
-                    artistName: track.artistName,
-                    durationSec: track.durationSec,
-                    genre: track.genre,
-                    tags: track.tags || [],
-                    audiusStreamUrl: streamUrl || undefined,
-                    thumbnailUrl: track.thumbnailUrl,
-                    fetchedAt: new Date(),
-                },
-            })
+        // Directly fetch from Audius without database caching
+        const audiusUrl = `https://discoveryprovider.audius.co/v1/tracks/${trackId}`
+        const response = await fetch(audiusUrl)
+        
+        if (!response.ok) {
+            return res.status(404).json({ error: 'Track not found' })
         }
 
+        const data = await response.json()
+        const track = data.data
+
+        if (!track) {
+            return res.status(404).json({ error: 'Track not found' })
+        }
+
+        // Return track with stream URL
         return res.status(200).json({
             track: {
-                trackId: cachedTrack.id,
-                title: cachedTrack.title,
-                artistName: cachedTrack.artistName,
-                durationSec: cachedTrack.durationSec,
-                genre: cachedTrack.genre,
-                tags: cachedTrack.tags,
-                streamUrl: cachedTrack.audiusStreamUrl,
-                thumbnailUrl: cachedTrack.thumbnailUrl,
-            },
+                trackId: track.id,
+                title: track.title,
+                artistName: track.user?.name || 'Unknown Artist',
+                durationSec: track.duration,
+                genre: track.genre,
+                tags: track.tags || [],
+                streamUrl: `/api/stream/${track.id}`,
+                thumbnailUrl: track.artwork?.['480x480'] || track.artwork?.['150x150']
+            }
         })
     } catch (error) {
         console.error('Get track error:', error)
         return res.status(500).json({ error: 'Failed to get track' })
     }
 }
-
-export default requireAuth(handler)

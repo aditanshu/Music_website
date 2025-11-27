@@ -69,7 +69,7 @@ export async function getTrackById(trackId: string): Promise<NormalizedTrack | n
 export async function getStreamUrl(trackId: string): Promise<string | null> {
     try {
         // Audius stream URL format
-        return `${AUDIUS_API_BASE}/v1/tracks/${trackId}/stream`
+        return `/api/stream/${trackId}`
     } catch (error) {
         console.error('Audius stream URL error:', error)
         return null

@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const ACOUSTID_API_KEY = 'your-acoustid-api-key' // Free API key from https://acoustid.org
+const ACOUSTID_API_KEY = process.env.ACOUSTID_API_KEY || 'TS31YbBov5' // Free API key from https://acoustid.org
 const ACOUSTID_API_URL = 'https://api.acoustid.org/v2/lookup'
 const MUSICBRAINZ_API_URL = 'https://musicbrainz.org/ws/2'
 
